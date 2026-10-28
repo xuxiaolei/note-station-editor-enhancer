@@ -26,7 +26,7 @@
 
 ## 用法
 
-把整个 `note-station-editor-enhancer` 文件夹拷到目标电脑，然后：
+从 [Releases](https://github.com/xuxiaolei/note-station-editor-enhancer/releases/latest) 下载 `note-station-editor-enhancer-*.zip` 并解压（也可以直接 clone 本仓库），然后：
 
 ```sh
 cd note-station-editor-enhancer
