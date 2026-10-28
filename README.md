@@ -103,3 +103,7 @@ note-station-editor-enhancer/
 - **不分发**任何官方安装包、`app.asar` 或其它二进制文件；安装脚本只在用户本机对已安装的客户端做本地修改。
 - 修改后应用为 adhoc 签名，可能影响自动更新与部分系统的信任判断；请自行评估风险，重要笔记先做备份。
 - "Synology"、"Note Station" 为其各自权利人的商标，此处仅用于说明兼容对象。
+
+## License
+
+[MIT](LICENSE) © 2026 xuxiaolei
