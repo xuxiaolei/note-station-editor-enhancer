@@ -23,8 +23,11 @@ APP = '/Applications/Synology Note Station Client.app'
 PLUGIN_ANCHOR_ORIG = '"syno_autolink syno_searchreplace hr syno_table"'
 PLUGIN_ANCHOR_MID = '"syno_autolink syno_searchreplace syno_markdown hr syno_table"'
 PLUGIN_ANCHOR_NEW = '"syno_autolink syno_searchreplace syno_markdown syno_beautify hr syno_table"'
+PLUGIN_ANCHOR_FULL = ('"syno_autolink syno_searchreplace syno_markdown syno_beautify '
+                      'syno_mermaid hr syno_table"')
 TOOLBAR_ANCHOR_ORIG = '["undo","redo"]'
 TOOLBAR_NEW = '["undo","redo","syno_markdown","syno_beautify"]'
+TOOLBAR_FULL = '["undo","redo","syno_markdown","syno_beautify","syno_mermaid"]'
 NS_REL = '/build/webman/3rdparty/NoteStation/notestation.js'
 
 
@@ -78,22 +81,29 @@ def main():
         f.seek(base + int(meta['offset']))
         js = f.read(int(meta['size'])).decode('utf-8', 'replace')
 
+    n_full = js.count(PLUGIN_ANCHOR_FULL)
     n_new = js.count(PLUGIN_ANCHOR_NEW)
     n_mid = js.count(PLUGIN_ANCHOR_MID)
     n_orig = js.count(PLUGIN_ANCHOR_ORIG)
+    t_full = js.count(TOOLBAR_FULL)
     t_new = js.count(TOOLBAR_NEW)
     t_orig = js.count(TOOLBAR_ANCHOR_ORIG)
     has_plugin = any('plugins/syno_markdown/plugin.min.js' in k for k in entries)
+    has_mermaid = any('plugins/syno_mermaid/plugin.min.js' in k for k in entries)
 
-    print('锚点     : plugins 原版 %d / markdown %d / 全量 %d ；toolbar 原版 %d / 新版 %d'
-          % (n_orig, n_mid, n_new, t_orig, t_new))
-    print('插件     :', '已存在' if has_plugin else '未安装')
+    total_plugin = n_full + n_new + n_mid + n_orig
+    total_toolbar = t_full + t_new + t_orig
 
-    if n_new == 2 and t_new == 1 and has_plugin:
-        print('结论     : ✓ 已打过补丁（重跑安装会覆盖刷新）')
+    print('锚点     : plugins 原版 %d / md %d / md+美化 %d / 全量 %d ；toolbar 原版 %d / md+美化 %d / 全量 %d'
+          % (n_orig, n_mid, n_new, n_full, t_orig, t_new, t_full))
+    print('插件     : markdown %s；mermaid %s'
+          % ('已存在' if has_plugin else '未安装', '已存在' if has_mermaid else '未安装'))
+
+    if n_full == 2 and t_full == 1 and has_plugin and has_mermaid:
+        print('结论     : ✓ 已打过补丁（含 Mermaid，重跑安装会覆盖刷新）')
         return 2
-    if n_orig + n_mid == 2 and t_orig >= 1:
-        print('结论     : ✓ 原版结构，可以打补丁')
+    if total_plugin == 2 and total_toolbar >= 1:
+        print('结论     : ✓ 结构可识别（原版或旧版补丁），可以打补丁')
         return 0
 
     print('结论     : ✗ 锚点不匹配，该版本未适配，请勿继续')

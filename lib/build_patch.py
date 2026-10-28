@@ -16,6 +16,7 @@
     2  锚点不匹配（该 App 版本未适配），此时不会修改任何文件
 """
 import os
+import re
 import shutil
 import sys
 
@@ -29,6 +30,7 @@ DEFAULT_BASE = os.path.join(APP, 'Contents/Resources/app.asar')
 PLUGIN_SRCS = [
     ('patch/syno_markdown', 'build/webman/modules/TinyMCE/js/tinymce/plugins/syno_markdown'),
     ('patch/syno_beautify', 'build/webman/modules/TinyMCE/js/tinymce/plugins/syno_beautify'),
+    ('patch/syno_mermaid', 'build/webman/modules/TinyMCE/js/tinymce/plugins/syno_mermaid'),
 ]
 CONTENT_CSS_SRC = os.path.join(ROOT, 'patch/content_css/note_content_patch.css')
 # notestation.js 的 content_css 指向 3rdparty/NoteStation/js/tinymce_plugins/note_content_patch.css，
@@ -41,16 +43,22 @@ SKIN_CSS_MARK = '/*syno_markdown:table*/'
 
 # ---- notestation.js 锚点（多版本兼容）----
 # plugins 串在文件里出现 2 次：主编辑器 fillConfig + initTinymcePlugins 预加载
-PLUGIN_FINAL = '"syno_autolink syno_searchreplace syno_markdown syno_beautify hr syno_table"'
+PLUGIN_FINAL = '"syno_autolink syno_searchreplace syno_markdown syno_beautify syno_mermaid hr syno_table"'
 PLUGIN_VARIANTS = [
-    '"syno_autolink syno_searchreplace hr syno_table"',                        # 原版
-    '"syno_autolink syno_searchreplace syno_markdown hr syno_table"',          # 只装过 markdown
+    '"syno_autolink syno_searchreplace syno_markdown syno_beautify hr syno_table"',    # 装过 markdown+beautify
+    '"syno_autolink syno_searchreplace syno_markdown hr syno_table"',                  # 只装过 markdown
+    '"syno_autolink syno_searchreplace hr syno_table"',                                # 原版
 ]
 
-TOOLBAR_FINAL = '["undo","redo","syno_markdown","syno_beautify"]'
+TOOLBAR_FINAL = '["undo","redo","syno_markdown","syno_beautify","syno_mermaid"]'
 # getTinyMCEToolbarConfig 的第一个分组就是 ["undo","redo"]（全文唯一）
 # 放在最左侧分组，避免被工具栏右侧「»」折叠菜单吞掉（放末尾实测会进折叠区）
-TOOLBAR_ANCHOR = ['["undo","redo"]']
+# 变体按「最长优先」排列，避免短串先匹配后长串失配
+TOOLBAR_ANCHOR = [
+    '["undo","redo","syno_markdown","syno_beautify"]',
+    '["undo","redo","syno_markdown"]',
+    '["undo","redo"]',
+]
 # 旧版补丁把按钮追加在末尾，若基线里存在先还原，避免出现重复按钮
 TOOLBAR_OLD_TAIL = [
     '["syno_image","syno_recorder","syno_formupload","syno_search","syno_markdown","syno_beautify"]',
@@ -73,6 +81,26 @@ def patch_once(s, variants, final, expect):
     return s
 
 
+# img 元素规则：notestation.js 里形如 img[class|src|...]（valid_elements 与
+# extended_valid_elements 各 3 处）。Mermaid 图的源码存在 img 的 data-mermaid 上，
+# 若不进白名单，editor.getContent() 序列化时该属性会被丢掉（笔记一保存就丢失源码）。
+IMG_RULE_RE = re.compile(r'(img\[[^\]]*)(\])')
+
+
+def allow_mermaid_attr(s):
+    """给每条 img[...] 规则追加 |data-mermaid（幂等），返回 (新串, 改动处数)"""
+    changed = [0]
+
+    def repl(m):
+        body, close = m.group(1), m.group(2)
+        if 'data-mermaid' in body:
+            return m.group(0)
+        changed[0] += 1
+        return body + '|data-mermaid' + close
+
+    return IMG_RULE_RE.sub(repl, s), changed[0]
+
+
 def main():
     if len(sys.argv) < 3:
         raise SystemExit(__doc__)
@@ -93,7 +121,7 @@ def main():
             shutil.rmtree(dst)
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copytree(src, dst)
-    print('  [1/5] 插件已放入: ' + ', '.join(os.path.basename(d) for _, d in PLUGIN_SRCS))
+    print('  [1/6] 插件已放入: ' + ', '.join(os.path.basename(d) for _, d in PLUGIN_SRCS))
 
     # 1b. 追加表格统一样式（幂等）：content_css + skin 双保险
     if not os.path.isfile(CONTENT_CSS_SRC):
@@ -118,7 +146,7 @@ def main():
         done.append('content_css')
     if append_once(SKIN_CSS_REL, SKIN_CSS_MARK):
         done.append('skin')
-    print('  [2/5] 表格样式' + ('已追加: ' + ' + '.join(done) if done else '已存在，跳过'))
+    print('  [2/6] 表格样式' + ('已追加: ' + ' + '.join(done) if done else '已存在，跳过'))
 
     # 2. notestation.js 补丁（幂等 + 兼容旧版补丁状态）
     with open(notestation, encoding='utf-8') as f:
@@ -129,24 +157,35 @@ def main():
         if old in s:
             s = s.replace(old, TOOLBAR_TAIL_ORIG)
     s = patch_once(s, TOOLBAR_ANCHOR, TOOLBAR_FINAL, 1)
+    s, n_attr = allow_mermaid_attr(s)
     if s != before:
         with open(notestation, 'w', encoding='utf-8') as f:
             f.write(s)
-        print('  [3/5] notestation.js 已打补丁：plugins 2 处 + toolbar 1 处')
+        print('  [3/6] notestation.js 已打补丁：plugins 2 处 + toolbar 1 处 + img 元素规则 %d 处' % n_attr)
     else:
-        print('  [3/5] notestation.js 已是补丁状态，跳过')
+        print('  [3/6] notestation.js 已是补丁状态，跳过')
 
     # 3. 重打包
     size = asar_tool.pack(out, srcdir, base)
-    print(f'  [4/5] 已重打包: {os.path.basename(out)}  size={size}')
+    print(f'  [4/6] 已重打包: {os.path.basename(out)}  size={size}')
 
     # 4. 自检
     checked, bad = asar_tool.verify(out, srcdir)
-    print(f'  [5/5] 自检: 文件数 {checked}, 异常 {len(bad)}')
+    print(f'  [5/6] 自检: 文件数 {checked}, 异常 {len(bad)}')
     if bad:
         for b in bad[:5]:
             print('     ', b)
         raise SystemExit('自检失败，已中止')
+
+    # 5. 确认 Mermaid 插件与 3.4MB 的库真的进了包（缺库会静默失效，必须硬校验）
+    header, _base = asar_tool._read_header(out)
+    paths = [p for p, _m in asar_tool._walk(header)]
+    lib_paths = [p for p in paths if p.endswith('/syno_mermaid/mermaid.min.js')]
+    plug_paths = [p for p in paths if p.endswith('/syno_mermaid/plugin.min.js')]
+    if not (lib_paths and plug_paths):
+        raise SystemExit('Mermaid 插件或库未进包，构建中止')
+    lib_kb = os.path.getsize(os.path.join(ROOT, 'patch/syno_mermaid/mermaid.min.js')) // 1024
+    print('  [6/6] Mermaid 已打包: %s（库 %d KB）' % (plug_paths[0], lib_kb))
 
 
 if __name__ == '__main__':

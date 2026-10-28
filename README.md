@@ -1,6 +1,6 @@
 # Note Station Editor Enhancer
 
-> 给 **Synology Note Station Client（macOS）** 加 Markdown、一键美化与代码语法高亮。一键安装、一键还原。
+> 给 **Synology Note Station Client（macOS）** 加 Markdown、一键美化、代码语法高亮与 Mermaid 图表。一键安装、一键还原。
 
 非官方社区补丁项目，与 Synology 无关联。仓库只包含补丁脚本与插件源码，**不包含任何官方安装包或二进制文件**。
 
@@ -16,13 +16,14 @@ Note Station 的桌面客户端是 Electron + TinyMCE 4 的富文本编辑器，
 | **表格难读** | 默认表格表头没有区分、没有斑马纹，边框与留白松散，几行数据就看串行 |
 | **代码块没法看** | 只有等宽字体、没有语法着色，几十行 Java / SQL 一眼看不出结构；粘贴来的代码还常带 Tab 缩进和成片空行 |
 | **排版靠手调** | 字号、行距、段距、标题层级每篇都要重设一遍，同一本笔记本里风格都统一不了 |
+| **想画图只能截图** | 系统架构、调用链、时序这些关系图，画在别处只能截图贴进来，又大又糊、搜索不到文字 |
 
 ## 它怎么解决
 
 | 做法 | 说明 |
 |---|---|
-| **不换编辑器，只打补丁** | 在原有 TinyMCE 4 上挂两个插件（`syno_markdown` / `syno_beautify`），工具栏只多两个图标，其它交互一律不动 |
-| **样式写进内容本身** | 效果全部是**内联样式**，不是本地 CSS 覆盖——所以同步到 DSM 网页版、手机 App、导出 HTML 后外观一致，不会「只有这台 Mac 上好看」 |
+| **不换编辑器，只打补丁** | 在原有 TinyMCE 4 上挂三个插件（`syno_markdown` / `syno_beautify` / `syno_mermaid`），工具栏只多三个图标，其它交互一律不动 |
+| **样式写进内容本身** | 效果全部是**内联样式**（Mermaid 图则是内嵌图片），不是本地 CSS 覆盖——所以同步到 DSM 网页版、手机 App、导出 HTML 后外观一致，不会「只有这台 Mac 上好看」 |
 | **不动笔记格式** | 存的仍是 Note Station 原生 HTML，附件、图表、待办、同步照旧；安装前自动备份 `app.asar`，`--restore` 一条命令回到原版 |
 
 ## 能力
@@ -33,6 +34,7 @@ Note Station 的桌面客户端是 Electron + TinyMCE 4 的富文本编辑器，
 | **Markdown 粘贴识别** | 直接粘贴 | 粘贴 Markdown 文本自动转成排版好的笔记；按住 **Option** 粘贴 = 原样 |
 | **一键美化** | 工具栏第二个图标（四角星，深色常显）/ `Cmd+Alt+B` | 字体、字号 15px、行距 1.85、段距、标题层级、列表、引用、表格（表头底色 + 斑马纹）全部写成内联样式；**按住 Option 只美化表格** |
 | **代码块格式化 + 语法高亮** | 跟随「一键美化」，粘贴代码块时也会自动执行一次 | 自动识别语言（Java / JS / TS / Python / Go / Rust / C / C++ / C# / PHP / Ruby / SQL / Shell / JSON / YAML / CSS / HTML / XML）；Tab→4 空格、清行尾空白、压空行、JSON 重排；注释 / 字符串 / 数字 / 关键字 / 方法名 / 标签 / 属性分色 |
+| **Mermaid 图表** | 工具栏第三个图标（流程图形状）/ 双击已有的图 | 画流程图、时序图、甘特图、类图、状态图等；边写边预览，插入为图片；**离线渲染**，不访问任何 CDN |
 
 ---
 
@@ -59,11 +61,21 @@ cd note-station-editor-enhancer
 也可以直接双击 `install.command`（第一次可能要在「系统设置 → 隐私与安全性」里允许）。
 `restore.command` 就是 `--restore` 的快捷方式。
 
-装完打开 App，编辑器工具栏最左侧会出现两个图标：
+装完打开 App，编辑器工具栏最左侧会出现三个图标：
 
 ```
-[撤销] [重做] | [M↓] [☆] | 其它原有按钮...
+[撤销] [重做] | [M↓] [☆] [流程图] | 其它原有按钮...
 ```
+
+### Mermaid 图表怎么用
+
+1. 点工具栏第三个图标（流程图形状）→ 弹出「Mermaid 图表」对话框，左边写源码、右边实时预览。
+2. 写好后点「插入」，图会作为图片写进笔记；**源码保存在图片的 `data-mermaid` 属性里**，随时可改。
+3. **双击**已插入的图 → 重新打开对话框改源码，点「更新」即就地替换。
+4. 对话框左下角「放大预览」：大图在正文里会被缩到栏宽（文字可能很小），放大后可按 100% 原尺寸滚动查看。
+5. 粘贴 Markdown 里的 ```` ```mermaid ```` 围栏代码块，点「一键美化」也会转成图。
+
+支持 mermaid 的全部图类型：flowchart / sequence / class / state / er / gantt / pie / journey 等。
 
 ## 套件结构
 
@@ -78,7 +90,9 @@ note-station-editor-enhancer/
 │   └── apply_root.sh        # 提权后的实际执行体
 ├── patch/
 │   ├── syno_markdown/plugin.min.js   # Markdown 输入 / 粘贴转换
-│   ├── syno_beautify/plugin.min.js   # 一键美化
+│   ├── syno_beautify/plugin.min.js   # 一键美化（含代码高亮）
+│   ├── syno_mermaid/plugin.min.js    # Mermaid 图表
+│   ├── syno_mermaid/mermaid.min.js  # mermaid 11 渲染库（离线内置，3.4 MB）
 │   └── content_css/note_content_patch.css  # 表格统一样式
 └── backup/                  # 首次安装自动生成：app.asar.<版本>.orig.bak
 ```
@@ -87,7 +101,7 @@ note-station-editor-enhancer/
 
 1. `selfcheck.py` 判断版本与锚点 → 不匹配直接退出
 2. 备份 `app.asar` 到 `backup/`
-3. 解包 → 放入两个插件 → 追加表格 CSS → 修改 `notestation.js` 三处 → 重打包 → 逐文件自检
+3. 解包 → 放入三个插件 → 追加表格 CSS → 修改 `notestation.js`（插件串 2 处 + 工具栏 1 处 + `img` 元素规则）→ 重打包 → 逐文件自检
 4. 写回应用，`codesign --force --deep -s -` 重签（adhoc），清除 quarantine
 
 ## 必须知道的几件事
@@ -98,6 +112,8 @@ note-station-editor-enhancer/
 4. 美化会覆盖表格单元格原有的手设底色 / 字号，后悔用 `Cmd+Z`。
 5. 新增按钮的图标是内联 SVG（data URI），颜色 `#98a0a9`、描边 1.2，与皮肤自带图标对齐；MD 按钮有深浅两套（`ICON_URI_MD_ON` / `ICON_URI_MD_OFF`），美化按钮为深色 `ICON_URI_BT`。
 6. **代码高亮是把着色写成 `span` 的内联样式**，所以随笔记同步、三端一致；副作用是在已着色的代码里继续打字会沿用该 token 的颜色（比如在注释末尾继续输入仍是灰色斜体）。改完内容再点一次「美化」就会重新着色。代码块识别不出语言时按纯文本处理，不会乱上色。
+7. **Mermaid 图是以 `data:image/svg+xml;base64` 图片存的**，不是内联 SVG —— TinyMCE 4 的 schema 会把 `<svg>` 整块剥掉，存进去保存后图就没了。代价是：图的大小在插入时就固定，正文栏宽下大图会被压缩、文字很小，需要看清就双击图再点「放大预览」。源码存在图片的 `data-mermaid` 属性里，不会丢。
+8. **mermaid 渲染库内置在插件目录里（3.4 MB）**，首次点击时才加载并解析；不访问任何网络，离线可用。
 
 ## 常见问题
 
@@ -117,6 +133,12 @@ note-station-editor-enhancer/
 ## 改插件后重新分发
 
 直接改 `patch/` 下的文件，然后在目标机重跑 `./install.command`（脚本每次都是从备份还原成干净基线再打补丁，重复执行幂等，不会叠加）。
+
+## 第三方组件
+
+| 组件 | 版本 | 许可 | 用途 |
+|---|---|---|---|
+| [mermaid](https://github.com/mermaid-js/mermaid) | 11.17.2 | MIT（许可全文见 `patch/syno_mermaid/LICENSE.mermaid`） | Mermaid 图表渲染（`patch/syno_mermaid/mermaid.min.js`，内置离线使用） |
 
 ## 免责声明
 
