@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>mermaid test</title>
+</head>
+<body>
+<pre id="out">running...</pre>
+<div id="holder"></div>
+
+<!--
+  Note Station 回归测试：验证 Mermaid 插件在「页面里有 Prototype.js」时仍能产出合法 SVG。
+  背景：Prototype.js 给 Array.prototype 挂了 each 方法，mermaid 的解析器会把数组里的
+        函数对象当成样式值拼进 SVG 的 style 属性，导致 SVG 非法 XML -> <img> 裂图。
+  这里用最小 stub 复现同样的条件（无需引入 200KB 的 Prototype.js）。
+-->
+<script>
+var $break = new Error('break');
+Array.prototype.each = function (iterator, context) {
+    try { this._each(iterator, context); } catch (e) { if (e != $break) throw e; }
+    return this;
+};
+</script>
+
+<script src="../../patch/syno_mermaid/mermaid.min.js"></script>
+
+<script>
+var PLUGIN_DIR = '../../patch/syno_mermaid';
+var USER_CODE = [
+    'graph TD',
+    '    admin["whale-admin<br/>Web 聚合入口 / 唯一启动类"]',
+    '    subgraph BIZ["业务域"]',
+    '    crm["whale-crm<br/>客户关系"]',
+    '    project["whale-project<br/>项目管理"]',
+    '    product["whale-product<br/>商品与库存"]',
+    '    workorder["whale-workorder<br/>运维工单"]',
+    '    contract["whale-contract<br/>合同"]',
+    '    order["whale-order<br/>采购与销售订单"]',
+    '    finance["whale-finance<br/>财务"]',
+    '    approval["whale-approval<br/>印章审批"]',
+    '    end',
+    '    subgraph PLATFORM["平台基础层"]',
+    '    framework["whale-framework<br/>安全 / 数据权限 / 多数据源"]',
+    '    system["whale-system<br/>系统管理"]',
+    '    common["whale-common<br/>公共基础"]',
+    '    quartz["whale-quartz<br/>定时任务"]',
+    '    generator["whale-generator<br/>代码生成"]',
+    '    end',
+    '    ability["whale-ability<br/>通用能力 / 三方集成"]',
+    '    admin --> crm & project & product & workorder & contract & order & finance & approval & ability & framework & system & quartz & generator',
+    '    quartz --> crm & project & product & workorder & order & finance & ability & framework & system & common',
+    '    finance --> order --> workorder',
+    '    finance --> project',
+    '    order --> contract --> project',
+    '    contract --> product',
+    '    order --> product',
+    '    workorder --> product',
+    '    project --> crm',
+    '    contract --> crm',
+    '    product --> crm',
+    '    order --> crm',
+    '    workorder --> crm',
+    '    finance --> crm',
+    '    approval --> crm',
+    '    crm & project & product & workorder & contract & order & finance & approval --> ability',
+    '    ability --> framework --> system --> common',
+    '    classDef biz fill:#e8f0fe,stroke:#4285f4,color:#111',
+    '    classDef plat fill:#f1f3f4,stroke:#5f6368,color:#111',
+    '    classDef cap fill:#fff3e0,stroke:#f9ab00,color:#111',
+    '    classDef entry fill:#e6f4ea,stroke:#34a853,color:#111',
+    '    class crm,project,product,workorder,contract,order,finance,approval biz',
+    '    class framework,system,common,quartz,generator plat',
+    '    class ability cap',
+    '    class admin entry',
+].join('\n');
+
+var results = [];
+function ok(cond, name, extra) {
+    results.push({ pass: !!cond, name: name, extra: extra === undefined ? '' : String(extra) });
+}
+function done() {
+    var failed = results.filter(function (r) { return !r.pass; });
+    var lines = results.map(function (r) {
+        return (r.pass ? 'PASS' : 'FAIL') + '  ' + r.name + (r.extra ? '   [' + r.extra + ']' : '');
+    });
+    lines.push(failed.length ? ('\nFAILED: ' + failed.length + '/' + results.length) : ('\nALL PASS: ' + results.length));
+    document.getElementById('out').textContent = lines.join('\n');
+    document.title = failed.length ? 'FAIL' : 'PASS';
+}
+
+// 用 stub 顶替 TinyMCE，拿到插件工厂
+window.tinymce = {
+    PluginManager: { add: function (name, fn) { window.__factory = fn; } },
+    baseURL: ''
+};
+</script>
+
+<script src="../../patch/syno_mermaid/plugin.min.js"></script>
+
+<script>
+(function () {
+    var editor = {
+        addButton: function () {},
+        on: function () {},
+        getBody: function () { return document.body; },
+        getDoc: function () { return document; },
+        dom: { hasClass: function () { return false; } }
+    };
+    var api;
+    try {
+        api = window.__factory(editor, PLUGIN_DIR);
+    } catch (e) {
+        ok(false, '插件工厂可调用', e.message);
+        done();
+        return;
+    }
+    ok(!!api && typeof api.render === 'function', '插件工厂返回 render 接口');
+
+    api.render(USER_CODE, function (err, svg) {
+        if (err) {
+            ok(false, '渲染成功', err.message || err);
+            done();
+            return;
+        }
+        ok(true, '渲染成功');
+        ok(svg.indexOf('style="function') < 0, 'SVG 没有被 Prototype 污染', 'len=' + svg.length);
+        ok(svg.length < 200000, 'SVG 体积正常（污染时会膨胀到 400KB+）', svg.length + 'B');
+
+        // XML 合法性：非法 XML 存成 data URI 图片必然裂图
+        var doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+        ok(!doc.querySelector('parsererror'), 'SVG 是合法 XML',
+            doc.querySelector('parsererror') ? doc.querySelector('parsererror').textContent.replace(/\s+/g, ' ').slice(0, 80) : '');
+        ok((svg.match(/foreignObject/g) || []).length > 0, '节点标签已渲染');
+
+        // 真正用 <img> 加载一次，确认不裂图
+        var uri = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+        var img = new Image();
+        img.onload = function () {
+            ok(img.naturalWidth > 0 && img.naturalHeight > 0, 'data URI 图片可正常加载',
+                img.naturalWidth + 'x' + img.naturalHeight);
+            checkBuildImg(api);
+        };
+        img.onerror = function () {
+            ok(false, 'data URI 图片可正常加载', 'onerror');
+            checkBuildImg(api);
+        };
+        img.src = uri;
+    });
+})();
+
+function checkBuildImg(api) {
+    // buildImg 生成的 <img> 也必须能显示
+    api.render('graph LR\n  a["A"] --> b["B"]', function (err, svg) {
+        if (err) { ok(false, '二次渲染成功', err.message); done(); return; }
+        var html = api.buildImg(svg, 'graph LR\n  a["A"] --> b["B"]');
+        ok(/class="syno-mermaid/.test(html), 'buildImg 输出带 syno-mermaid 类');
+        ok(/data-mermaid="/.test(html), 'buildImg 输出带 data-mermaid 源码');
+        var holder = document.getElementById('holder');
+        holder.innerHTML = html;
+        var el = holder.querySelector('img');
+        if (!el) { ok(false, 'buildImg 生成的 img 存在'); done(); return; }
+        if (el.complete && el.naturalWidth > 0) {
+            ok(true, 'buildImg 生成的 img 可正常加载', el.naturalWidth + 'x' + el.naturalHeight);
+            done();
+            return;
+        }
+        el.onload = function () {
+            ok(el.naturalWidth > 0, 'buildImg 生成的 img 可正常加载', el.naturalWidth + 'x' + el.naturalHeight);
+            done();
+        };
+        el.onerror = function () { ok(false, 'buildImg 生成的 img 可正常加载', 'onerror'); done(); };
+    });
+}
+</script>
+</body>
+</html>
