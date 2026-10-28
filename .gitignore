@@ -1,0 +1,16 @@
+/backup/*.bak
+/backup/*.orig.bak
+*.orig.bak
+
+# 打包产物
+*.zip
+dist/
+
+# macOS
+.DS_Store
+._*
+__MACOSX/
+
+# Python
+__pycache__/
+*.pyc

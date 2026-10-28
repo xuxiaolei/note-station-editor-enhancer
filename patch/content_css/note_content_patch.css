@@ -1,0 +1,63 @@
+/*
+ * syno_markdown / syno_beautify —— 表格统一显示样式（content_css + skin 共用）
+ *
+ * 作用域：仅编辑器 iframe 内的显示效果，不改写笔记 HTML 内容。
+ * 定位：给「没点过美化」的笔记兜一个不丑的默认表格样式；
+ *      点过「美化」的表格带内联样式，按 CSS 层叠规则自然胜出（因此这里不用 !important）。
+ *
+ * 覆盖对象：skin 里 .mce-item-table 的默认值
+ *   border-collapse:separate + table-layout:fixed + lightgray 细线 + td/th 的 Verdana 12px
+ */
+
+/* ---- 表格主体 ---- */
+body table,
+body table.mce-item-table {
+    border-collapse: collapse;
+    border-spacing: 0;
+    table-layout: auto;
+    width: 100%;
+    max-width: 100%;
+    margin: 6px 0;
+}
+
+/* ---- 单元格 ---- */
+body table th,
+body table td,
+body table.mce-item-table th,
+body table.mce-item-table td,
+body table.mce-item-table caption {
+    border: 1px solid #d7e1eb;
+    padding: 8px 12px;
+    vertical-align: top;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+        "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.65;
+    word-break: break-word;
+}
+
+/* ---- 表头：有 thead ---- */
+body table thead th,
+body table thead td {
+    background: #f2f6fa;
+    font-weight: bold;
+    text-align: left;
+}
+
+/* ---- 表头：无 thead，首行当表头（Note Station 自带表格就是这种结构） ---- */
+body table:not(:has(thead)) > tbody > tr:first-child > td {
+    background: #f2f6fa;
+    font-weight: bold;
+    text-align: left;
+}
+
+/* ---- 斑马纹 ---- */
+body table > tbody > tr:nth-child(even) > td {
+    background: #fafcfe;
+}
+
+/* ---- 选中态保持可见 ---- */
+body table td.mce-item-selected,
+body table th.mce-item-selected {
+    background-color: #e5faff;
+}
