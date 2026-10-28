@@ -141,7 +141,7 @@ Mermaid 部分额外做了三层验证：
 
 1. **应用现场复现** —— 在 headless Chrome 里用应用内**真实的** `prototype.js` + `mermaid.min.js` + 插件，跑用户那张 33 节点的 whale 依赖图：SVG 无污染、是合法 XML、33 个节点方框齐全、data URI 图片能正常加载（1921×1408）。
 2. **对照实验** —— 把样式净化临时关掉（即 v3.3.0 的行为）再跑同一张图：SVG 从 95 KB 膨胀到 413 KB 且检出 Prototype 污染，证明净化确实是在解决真实问题、而不是碰巧。
-3. **回归测试** —— 仓库内 `test/mermaid/` 下的 10 条断言（渲染成功 / 无污染 / 体积正常 / XML 合法 / 有节点 / 图片可加载 / `buildImg` 输出完整等），跑 `./test/mermaid/run_test.sh`（需要装了 Chrome）；修复开启时全绿、关闭时必然报红。
+3. **回归测试** —— 仓库内 `test/mermaid/` 下的 14 条断言（渲染成功 / 无污染 / 体积正常 / XML 合法 / 有节点 / 图片可加载 / `buildImg` 输出完整 / 坏图自动重渲染等），跑 `./test/mermaid/run_test.sh`（需要装了 Chrome）；修复开启时全绿、关闭时必然报红。
 
 ## 改插件后重新分发
 

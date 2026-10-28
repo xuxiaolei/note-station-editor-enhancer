@@ -75,6 +75,20 @@ var USER_CODE = [
 ].join('\n');
 
 var results = [];
+window.onerror = function (m, src, line) {
+    var pre = document.getElementById('out');
+    if (pre) { pre.textContent = 'JS ERROR: ' + m + ' @' + src + ':' + line; }
+    document.title = 'FAIL';
+    return true;
+};
+
+window.onerror = function (m, src, line) {
+    var pre = document.getElementById('out');
+    if (pre) { pre.textContent = 'JS ERROR: ' + m + ' @' + src + ':' + line; }
+    document.title = 'FAIL';
+    return true;
+};
+
 function ok(cond, name, extra) {
     results.push({ pass: !!cond, name: name, extra: extra === undefined ? '' : String(extra) });
 }
@@ -161,15 +175,63 @@ function checkBuildImg(api) {
         if (!el) { ok(false, 'buildImg 生成的 img 存在'); done(); return; }
         if (el.complete && el.naturalWidth > 0) {
             ok(true, 'buildImg 生成的 img 可正常加载', el.naturalWidth + 'x' + el.naturalHeight);
-            done();
+            checkRepairImages(api);
             return;
         }
         el.onload = function () {
             ok(el.naturalWidth > 0, 'buildImg 生成的 img 可正常加载', el.naturalWidth + 'x' + el.naturalHeight);
-            done();
+            checkRepairImages(api);
         };
         el.onerror = function () { ok(false, 'buildImg 生成的 img 可正常加载', 'onerror'); done(); };
     });
+}
+
+/**
+ * 验证「自动修复旧裂图」：模拟 v3.3.0 留下的坏图（data URI 里的 SVG 非法，
+ * 浏览器加载失败），调用 repairImages() 后应被自动重渲染并原地替换。
+ */
+function checkRepairImages(api) {
+    if (!api || typeof api.repairImages !== 'function') {
+        ok(false, '提供 repairImages 接口');
+        done();
+        return;
+    }
+    var holder = document.getElementById('holder');
+    var bad = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0" '
+        + 'style="function each(iterator, context) { if (number < 1) return array; }" /></svg>';
+    var badUri = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(bad)));
+
+    var img = document.createElement('img');
+    img.className = 'syno-mermaid';
+    img.setAttribute('data-mermaid', encodeURIComponent(USER_CODE));
+    img.src = badUri;
+    img.alt = 'Mermaid 图表';
+    holder.innerHTML = '';
+    holder.appendChild(img);
+
+    var before = img.getAttribute('src');
+    var d0 = new DOMParser().parseFromString(atob(before.split(',')[1]), 'image/svg+xml');
+    ok(!!d0.querySelector('parsererror'), '前置：构造的确实是坏图（XML 非法）');
+
+    api.repairImages();
+
+    var tries = 0;
+    (function poll() {
+        tries++;
+        var cur = holder.querySelector('img.syno-mermaid');
+        var now = cur ? cur.getAttribute('src') : '';
+        if (now !== before && now.indexOf('base64,') > 0) {
+            var raw = atob(now.split(',')[1]);
+            var d1 = new DOMParser().parseFromString(raw, 'image/svg+xml');
+            ok(!d1.querySelector('parsererror'), '坏图被自动重渲染，SVG 现在合法', 'len=' + raw.length);
+            ok(raw.indexOf('function each') < 0, '重渲染后的 SVG 无 Prototype 污染');
+            ok(cur.getAttribute('data-nsh-fixed') === '1', '已打修复标记（防重复处理）');
+            done();
+            return;
+        }
+        if (tries > 80) { ok(false, '坏图被自动重渲染', '超时未替换'); done(); return; }
+        setTimeout(poll, 100);
+    })();
 }
 </script>
 </body>
